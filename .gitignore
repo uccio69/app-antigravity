@@ -1,0 +1,36 @@
+# Dipendenze
+node_modules/
+
+# File intermedi - sempre rigenerabili
+.tmp/
+
+# Variabili d'ambiente e segreti
+.env
+.env.local
+.env.production
+
+# Credenziali OAuth Google
+credentials.json
+token.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Next.js
+.next/
+out/
+
+# Database
+*.db
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
