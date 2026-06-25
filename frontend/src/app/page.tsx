@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 // Use relative path for API calls so they go through the Next.js rewrite proxy
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const API_URL = "";
 
 const EUROPEAN_COUNTRIES = [
   "Albania", "Andorra", "Armenia", "Austria", "Azerbaigian",

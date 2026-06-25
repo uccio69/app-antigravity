@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 
 // Use relative path for API calls so they go through the Next.js rewrite proxy
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const API_URL = "";
 
 interface Visitor {
   id: number;
