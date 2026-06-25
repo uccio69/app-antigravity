@@ -199,23 +199,46 @@ export default function AdminDashboard() {
             Gestione visitatori registrati
           </p>
         </div>
-          }}
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => { setShowAdminModal(true); fetchAdmins(); }}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all hover:translate-y-[-1px]"
+            style={{ background: "var(--glass-bg)", border: "1px solid var(--glass-border)", color: "var(--text-primary)" }}
           >
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
-          </svg>
-          Torna al form
-        </Link>
+            Gestione Admin
+          </button>
+          <button
+            onClick={handleLogout}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all hover:translate-y-[-1px]"
+            style={{ background: "var(--glass-bg)", border: "1px solid var(--glass-border)", color: "var(--error)" }}
+          >
+            Logout
+          </button>
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all hover:translate-y-[-1px]"
+            style={{
+              background: "var(--glass-bg)",
+              border: "1px solid var(--glass-border)",
+              color: "var(--text-secondary)",
+            }}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            Torna al form
+          </Link>
+        </div>
       </div>
 
       {/* Stats Cards */}
