@@ -1,17 +1,3 @@
-version: 1
-frontend:
-  phases:
-    preBuild:
-      commands:
-        - npm ci --legacy-peer-deps
-    build:
-      commands:
-        - npm run build
-  artifacts:
-    baseDirectory: .next
-    files:
-      - '**/*'
-  cache:
-    paths:
-      - node_modules/**/*
-      - .next/cache/**/*
+# Questo file è stato spostato alla radice del repository (/amplify.yml)
+# per gestire correttamente il build di Next.js dalla sottocartella /frontend.
+

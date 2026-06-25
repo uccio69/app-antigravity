@@ -89,9 +89,9 @@ AWS Amplify compilerà ed eseguirà l'applicazione Next.js gestendo il Server-Si
 2. Clicca su **New App** -> **Host web app**.
 3. Seleziona il tuo Git provider (es. GitHub) e clicca su **Continue**.
 4. Seleziona il repository del tuo progetto e il branch desiderato (es. `main`).
-5. **App directory**: Inserisci `frontend` (importante, poiché il progetto è una monorepo e Next.js si trova in questa sottocartella).
+5. **App directory**: Lascia la cartella radice `/` (il file `/amplify.yml` posizionato alla radice gestirà automaticamente il cambio directory ed il build della cartella `frontend`).
 6. **Build settings**:
-   * AWS rileverà automaticamente la presenza di Next.js e compilerà i settaggi. Il file `frontend/amplify.yml` configurato guiderà il build.
+   * AWS rileverà automaticamente il file `/amplify.yml` presente alla radice del repository e lo userà come configurazione di build.
 7. **Environment variables**:
    * Aggiungi la variabile d'ambiente per connettere il frontend alle API del backend:
      * Key: `NEXT_PUBLIC_API_URL`
