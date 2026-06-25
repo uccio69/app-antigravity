@@ -29,3 +29,18 @@ class Visitor(Base):
 
     def __repr__(self):
         return f"<Visitor(id={self.id}, nome='{self.nome}', cognome='{self.cognome}')>"
+
+
+class AdminUser(Base):
+    """
+    Modello per la tabella 'admin_users'.
+    """
+    __tablename__ = "admin_users"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    username = Column(String(50), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<AdminUser(id={self.id}, username='{self.username}')>"

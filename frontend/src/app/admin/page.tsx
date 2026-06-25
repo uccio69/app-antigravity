@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 // Use relative path for API calls so they go through the Next.js rewrite proxy
 const API_URL = "";
@@ -32,14 +33,36 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const router = useRouter();
+  const [selectedVisitors, setSelectedVisitors] = useState<Set<number>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [admins, setAdmins] = useState<any[]>([]);
+  const [newAdminUser, setNewAdminUser] = useState("");
+  const [newAdminPass, setNewAdminPass] = useState("");
+
   const fetchData = useCallback(async (searchQuery = "") => {
     try {
       setError(null);
+      const token = localStorage.getItem("admin_token");
+      if (!token) {
+        router.push("/admin/login");
+        return;
+      }
+      
+      const headers = { "Authorization": `Bearer ${token}` };
       const params = searchQuery ? `?search=${encodeURIComponent(searchQuery)}` : "";
+      
       const [visitorsRes, statsRes] = await Promise.all([
-        fetch(`${API_URL}/api/visitors${params}`),
-        fetch(`${API_URL}/api/visitors/stats`),
+        fetch(`${API_URL}/api/visitors${params}`, { headers }),
+        fetch(`${API_URL}/api/visitors/stats`, { headers }),
       ]);
+
+      if (visitorsRes.status === 401 || statsRes.status === 401) {
+        localStorage.removeItem("admin_token");
+        router.push("/admin/login");
+        return;
+      }
 
       if (!visitorsRes.ok || !statsRes.ok) {
         throw new Error("Errore nel caricamento dei dati");
@@ -57,7 +80,91 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
+
+  const handleBulkDelete = async () => {
+    if (selectedVisitors.size === 0) return;
+    if (!window.confirm(`Sei sicuro di voler eliminare ${selectedVisitors.size} visitatori?`)) return;
+    
+    setIsDeleting(true);
+    try {
+      const token = localStorage.getItem("admin_token");
+      const res = await fetch(`${API_URL}/api/visitors/delete-bulk`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ ids: Array.from(selectedVisitors) })
+      });
+      
+      if (!res.ok) throw new Error("Errore durante l'eliminazione");
+      
+      setSelectedVisitors(new Set());
+      fetchData(search);
+    } catch (err) {
+      alert("Errore durante l'eliminazione");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const fetchAdmins = async () => {
+    try {
+      const token = localStorage.getItem("admin_token");
+      const res = await fetch(`${API_URL}/api/admins`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setAdmins(await res.json());
+      }
+    } catch (err) { }
+  };
+
+  const handleCreateAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem("admin_token");
+      const res = await fetch(`${API_URL}/api/admins`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ username: newAdminUser, password: newAdminPass })
+      });
+      if (res.ok) {
+        setNewAdminUser("");
+        setNewAdminPass("");
+        fetchAdmins();
+      } else {
+        const error = await res.json();
+        alert(error.detail || "Errore creazione admin");
+      }
+    } catch (err) {}
+  };
+
+  const handleDeleteAdmin = async (id: number) => {
+    if (!window.confirm("Eliminare questo admin?")) return;
+    try {
+      const token = localStorage.getItem("admin_token");
+      const res = await fetch(`${API_URL}/api/admins/${id}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (res.ok) {
+        fetchAdmins();
+      } else {
+        const error = await res.json();
+        alert(error.detail || "Errore eliminazione admin");
+      }
+    } catch (err) {}
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("admin_token");
+    router.push("/admin/login");
+  };
 
   useEffect(() => {
     fetchData();
@@ -92,13 +199,6 @@ export default function AdminDashboard() {
             Gestione visitatori registrati
           </p>
         </div>
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all hover:translate-y-[-1px]"
-          style={{
-            background: "var(--glass-bg)",
-            border: "1px solid var(--glass-border)",
-            color: "var(--text-secondary)",
           }}
         >
           <svg
@@ -223,9 +323,24 @@ export default function AdminDashboard() {
             Aggiorna
           </button>
           <button
-            onClick={() => {
-              const params = search ? `?search=${encodeURIComponent(search)}` : "";
-              window.open(`${API_URL}/api/visitors/export${params}`, "_blank");
+            onClick={async () => {
+              try {
+                const token = localStorage.getItem("admin_token");
+                const params = search ? `?search=${encodeURIComponent(search)}` : "";
+                const res = await fetch(`${API_URL}/api/visitors/export${params}`, {
+                  headers: { "Authorization": `Bearer ${token}` }
+                });
+                if (!res.ok) throw new Error("Errore export");
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `visitatori_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+              } catch(e) { alert("Errore esportazione"); }
             }}
             className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium transition-all hover:translate-y-[-1px] cursor-pointer"
             style={{
@@ -251,6 +366,17 @@ export default function AdminDashboard() {
             </svg>
             Esporta CSV
           </button>
+          {selectedVisitors.size > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              disabled={isDeleting}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium transition-all hover:translate-y-[-1px] cursor-pointer"
+              style={{ background: "var(--error)", color: "white" }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              Elimina Selezionati ({selectedVisitors.size})
+            </button>
+          )}
         </div>
       </div>
 
@@ -374,6 +500,19 @@ export default function AdminDashboard() {
             <table className="data-table">
               <thead>
                 <tr>
+                  <th>
+                    <input 
+                      type="checkbox" 
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedVisitors(new Set(visitors.map(v => v.id)));
+                        } else {
+                          setSelectedVisitors(new Set());
+                        }
+                      }}
+                      checked={visitors.length > 0 && selectedVisitors.size === visitors.length}
+                    />
+                  </th>
                   <th>#</th>
                   <th>Nome</th>
                   <th>Cognome</th>
@@ -388,6 +527,18 @@ export default function AdminDashboard() {
               <tbody>
                 {visitors.map((visitor, idx) => (
                   <tr key={visitor.id}>
+                    <td>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedVisitors.has(visitor.id)}
+                        onChange={(e) => {
+                          const newSet = new Set(selectedVisitors);
+                          if (e.target.checked) newSet.add(visitor.id);
+                          else newSet.delete(visitor.id);
+                          setSelectedVisitors(newSet);
+                        }}
+                      />
+                    </td>
                     <td>
                       <span className="badge badge-purple">{visitor.id}</span>
                     </td>
@@ -439,6 +590,51 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      {/* Admin Modal */}
+      {showAdminModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in-up">
+          <div className="glass-card w-full max-w-lg p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold">Gestione Amministratori</h2>
+              <button onClick={() => setShowAdminModal(false)} className="text-gray-500 hover:text-white">✕</button>
+            </div>
+
+            <form onSubmit={handleCreateAdmin} className="mb-8 flex gap-3 items-end">
+              <div className="flex-1">
+                <label className="block text-xs mb-1">Nuovo Username</label>
+                <input type="text" value={newAdminUser} onChange={(e)=>setNewAdminUser(e.target.value)} required className="input-field py-2" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs mb-1">Nuova Password</label>
+                <input type="password" value={newAdminPass} onChange={(e)=>setNewAdminPass(e.target.value)} required minLength={5} className="input-field py-2" />
+              </div>
+              <button type="submit" className="px-4 py-2 rounded-xl bg-green-500/20 text-green-500 hover:bg-green-500/30 font-medium">
+                Crea
+              </button>
+            </form>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+              {admins.map(admin => (
+                <div key={admin.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-700/50 bg-black/20">
+                  <div>
+                    <p className="font-medium">{admin.username}</p>
+                    <p className="text-xs text-gray-500">Creato: {formatDate(admin.created_at)}</p>
+                  </div>
+                  <button 
+                    onClick={() => handleDeleteAdmin(admin.id)}
+                    className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg"
+                    title="Elimina"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }

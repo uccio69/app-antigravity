@@ -13,13 +13,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func as sql_func
 from sqlalchemy.orm import Session
+from fastapi.security import OAuth2PasswordRequestForm
 
 from database import Base, engine, get_db
-from models import Visitor
-from schemas import VisitorCreate, VisitorResponse, VisitorStats
+from models import Visitor, AdminUser
+from schemas import (VisitorCreate, VisitorResponse, VisitorStats, 
+                     AdminCreate, AdminUpdate, AdminResponse, Token, BulkDeleteVisitors)
+import auth
 
 # Creazione tabelle al primo avvio
 Base.metadata.create_all(bind=engine)
+
+with Session(engine) as db:
+    if db.query(AdminUser).count() == 0:
+        default_admin = AdminUser(
+            username="ADMIN",
+            hashed_password=auth.get_password_hash("12345")
+        )
+        db.add(default_admin)
+        db.commit()
 
 # Inizializzazione app FastAPI
 app = FastAPI(
@@ -54,6 +66,57 @@ def root():
     return {"status": "ok", "message": "Visitor Registration API is running"}
 
 
+@app.post("/api/auth/login", response_model=Token)
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    admin = db.query(AdminUser).filter(AdminUser.username == form_data.username).first()
+    if not admin or not auth.verify_password(form_data.password, admin.hashed_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = auth.create_access_token(data={"sub": admin.username})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.get("/api/admins", response_model=List[AdminResponse])
+def get_admins(db: Session = Depends(get_db), current_admin: AdminUser = Depends(auth.get_current_admin)):
+    return db.query(AdminUser).all()
+
+@app.post("/api/admins", response_model=AdminResponse, status_code=201)
+def create_admin(admin: AdminCreate, db: Session = Depends(get_db), current_admin: AdminUser = Depends(auth.get_current_admin)):
+    if db.query(AdminUser).filter(AdminUser.username == admin.username).first():
+        raise HTTPException(status_code=400, detail="Username already registered")
+    db_admin = AdminUser(
+        username=admin.username,
+        hashed_password=auth.get_password_hash(admin.password)
+    )
+    db.add(db_admin)
+    db.commit()
+    db.refresh(db_admin)
+    return db_admin
+
+@app.put("/api/admins/{admin_id}", response_model=AdminResponse)
+def update_admin(admin_id: int, admin: AdminUpdate, db: Session = Depends(get_db), current_admin: AdminUser = Depends(auth.get_current_admin)):
+    db_admin = db.query(AdminUser).filter(AdminUser.id == admin_id).first()
+    if not db_admin:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    db_admin.hashed_password = auth.get_password_hash(admin.password)
+    db.commit()
+    db.refresh(db_admin)
+    return db_admin
+
+@app.delete("/api/admins/{admin_id}", status_code=204)
+def delete_admin(admin_id: int, db: Session = Depends(get_db), current_admin: AdminUser = Depends(auth.get_current_admin)):
+    db_admin = db.query(AdminUser).filter(AdminUser.id == admin_id).first()
+    if not db_admin:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    if db.query(AdminUser).count() <= 1:
+        raise HTTPException(status_code=400, detail="Cannot delete the last admin")
+    db.delete(db_admin)
+    db.commit()
+
+
 @app.post("/api/visitors", response_model=VisitorResponse, status_code=201)
 def create_visitor(visitor: VisitorCreate, db: Session = Depends(get_db)):
     """
@@ -84,6 +147,7 @@ def get_visitors(
     skip: int = Query(0, ge=0, description="Offset per paginazione"),
     limit: int = Query(100, ge=1, le=500, description="Numero massimo di risultati"),
     db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(auth.get_current_admin),
 ):
     """
     Restituisce la lista dei visitatori registrati.
@@ -109,7 +173,7 @@ def get_visitors(
 
 
 @app.get("/api/visitors/stats", response_model=VisitorStats)
-def get_visitor_stats(db: Session = Depends(get_db)):
+def get_visitor_stats(db: Session = Depends(get_db), current_admin: AdminUser = Depends(auth.get_current_admin)):
     """
     Restituisce statistiche aggregate sui visitatori.
     """
@@ -128,6 +192,7 @@ def get_visitor_stats(db: Session = Depends(get_db)):
 def export_visitors_csv(
     search: Optional[str] = Query(None, description="Filtra per nome, cognome o email"),
     db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(auth.get_current_admin),
 ):
     """
     Esporta la lista dei visitatori in formato CSV.
@@ -172,6 +237,15 @@ def export_visitors_csv(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@app.post("/api/visitors/delete-bulk", status_code=204)
+def bulk_delete_visitors(payload: BulkDeleteVisitors, db: Session = Depends(get_db), current_admin: AdminUser = Depends(auth.get_current_admin)):
+    """
+    Elimina multipli visitatori dal database in una sola volta.
+    """
+    db.query(Visitor).filter(Visitor.id.in_(payload.ids)).delete(synchronize_session=False)
+    db.commit()
 
 
 if __name__ == "__main__":
